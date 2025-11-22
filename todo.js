@@ -1,156 +1,152 @@
-const taskForm = document.getElementById('task-form');
-const taskInput = document.getElementById('task-input');
-const pendingTasksList = document.getElementById('pending-tasks');
-const completedTasksList = document.getElementById('completed-tasks');
+let todos = [];
+        let currentFilter = 'all';
 
-const editModal = document.getElementById('edit-modal');
-const closeButton = document.querySelector('.close-button');
-const editForm = document.getElementById('edit-form');
-const editTaskIdInput = document.getElementById('edit-task-id');
-const editTaskInput = document.getElementById('edit-task-input');
+        // Load todos from memory on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTodos();
+            render();
+        });
 
-let tasks = [];
+        // Event listeners
+        document.getElementById('addBtn').addEventListener('click', addTodo);
+        document.getElementById('todoInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addTodo();
+        });
 
-window.onload = function() {
-  if (localStorage.getItem('tasks')) {
-    tasks = JSON.parse(localStorage.getItem('tasks'));
-  }
-  renderTasks();
-};
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                setFilter(e.target.dataset.filter);
+            });
+        });
 
-function saveTasks() {
-  localStorage.setItem('tasks', JSON.stringify(tasks));
-}
+        document.getElementById('clearCompleted').addEventListener('click', clearCompleted);
 
-function renderTasks() {
-  pendingTasksList.innerHTML = '';
-  completedTasksList.innerHTML = '';
+        // Functions
+        function addTodo() {
+            const input = document.getElementById('todoInput');
+            const text = input.value.trim();
+            
+            if (text === '') {
+                alert('Please enter a task');
+                return;
+            }
 
-  tasks.forEach(task => {
-    const li = document.createElement('li');
-    li.className = 'task-item';
-    if (task.completed) {
-      li.classList.add('completed');
-    }
+            const todo = {
+                id: Date.now(),
+                text: text,
+                completed: false
+            };
 
-    li.innerHTML = `
-      <div>
-        <strong>${task.title}</strong>
-        <p>${task.description}</p>
-        <small>Created At: ${new Date(task.createdAt).toLocaleString()}</small>
-        ${task.completed ? `<br><small>Completed At: ${new Date(task.completedAt).toLocaleString()}</small>` : ''}
-      </div>
-      <div class="task-actions">
-        ${!task.completed ? `<button class="complete-btn" data-id="${task.id}">Complete</button>` : ''}
-        <button class="edit-btn" data-id="${task.id}">Edit</button>
-        <button class="delete-btn" data-id="${task.id}">Delete</button>
-      </div>
-    `;
+            todos.push(todo);
+            input.value = '';
+            saveTodos();
+            render();
+        }
 
-    if (task.completed) {
-      completedTasksList.appendChild(li);
-    } else {
-      pendingTasksList.appendChild(li);
-    }
-  });
-}
+        function toggleTodo(id) {
+            const todo = todos.find(t => t.id === id);
+            if (todo) {
+                todo.completed = !todo.completed;
+                saveTodos();
+                render();
+            }
+        }
 
-taskForm.addEventListener('submit', function(e) {
-  e.preventDefault();
-  const title = taskInput.value.trim();
-  const description = prompt('Enter task description:', '');
-  
-  if (title === '') {
-    alert('Task title cannot be empty!');
-    return;
-  }
+        function deleteTodo(id) {
+            todos = todos.filter(t => t.id !== id);
+            saveTodos();
+            render();
+        }
 
-  const newTask = {
-    id: Date.now(),
-    title,
-    description: description || '',
-    createdAt: new Date(),
-    completed: false,
-    completedAt: null
-  };
+        function setFilter(filter) {
+            currentFilter = filter;
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.filter === filter) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            render();
+        }
 
-  tasks.push(newTask);
-  saveTasks();
-  renderTasks();
-  taskForm.reset();
-});
+        function clearCompleted() {
+            todos = todos.filter(t => !t.completed);
+            saveTodos();
+            render();
+        }
 
-document.addEventListener('click', function(e) {
-  const target = e.target;
+        function getFilteredTodos() {
+            if (currentFilter === 'active') {
+                return todos.filter(t => !t.completed);
+            } else if (currentFilter === 'completed') {
+                return todos.filter(t => t.completed);
+            }
+            return todos;
+        }
 
-  if (target.classList.contains('complete-btn')) {
-    const taskId = parseInt(target.getAttribute('data-id'));
-    completeTask(taskId);
-  }
+        function render() {
+            const todoList = document.getElementById('todoList');
+            const filteredTodos = getFilteredTodos();
+            
+            if (filteredTodos.length === 0) {
+                todoList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>${getEmptyMessage()}</p>
+                    </div>
+                `;
+                updateStats();
+                return;
+            }
 
-  if (target.classList.contains('edit-btn')) {
-    const taskId = parseInt(target.getAttribute('data-id'));
-    openEditModal(taskId);
-  }
+            todoList.innerHTML = filteredTodos.map(todo => `
+                <div class="todo-item ${todo.completed ? 'completed' : ''}">
+                    <div class="checkbox ${todo.completed ? 'checked' : ''}" onclick="toggleTodo(${todo.id})"></div>
+                    <span class="todo-text">${escapeHtml(todo.text)}</span>
+                    <div class="todo-actions">
+                        <button class="btn-icon btn-delete" onclick="deleteTodo(${todo.id})" aria-label="Delete">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
 
-  if (target.classList.contains('delete-btn')) {
-    const taskId = parseInt(target.getAttribute('data-id'));
-    deleteTask(taskId);
-  }
-});
+            updateStats();
+        }
 
-function completeTask(id) {
-  const task = tasks.find(t => t.id === id);
-  if (task && !task.completed) {
-    task.completed = true;
-    task.completedAt = new Date();
-    saveTasks();
-    renderTasks();
-  }
-}
+        function getEmptyMessage() {
+            if (currentFilter === 'active') {
+                return 'No active tasks. Great job!';
+            } else if (currentFilter === 'completed') {
+                return 'No completed tasks yet.';
+            }
+            return 'No tasks yet. Add one to get started!';
+        }
 
-function deleteTask(id) {
-  if (confirm('Are you sure you want to delete this task?')) {
-    tasks = tasks.filter(t => t.id !== id);
-    saveTasks();
-    renderTasks();
-  }
-}
+        function updateStats() {
+            const activeCount = todos.filter(t => !t.completed).length;
+            const countText = activeCount === 1 ? '1 item left' : `${activeCount} items left`;
+            document.getElementById('todoCount').textContent = countText;
+        }
 
-function openEditModal(id) {
-  const task = tasks.find(t => t.id === id);
-  if (task) {
-    editTaskIdInput.value = task.id;
-    editTaskInput.value = task.title;
-    editModal.style.display = 'block';
-  }
-}
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
-closeButton.addEventListener('click', function() {
-  editModal.style.display = 'none';
-});
+        function saveTodos() {
+            // Using in-memory storage only (no localStorage in sandbox environment)
+            // Todos persist during the session
+        }
 
-window.addEventListener('click', function(e) {
-  if (e.target == editModal) {
-    editModal.style.display = 'none';
-  }
-});
-
-editForm.addEventListener('submit', function(e) {
-  e.preventDefault();
-  const id = parseInt(editTaskIdInput.value);
-  const updatedTitle = editTaskInput.value.trim();
-
-  if (updatedTitle === '') {
-    alert('Task title cannot be empty!');
-    return;
-  }
-
-  const task = tasks.find(t => t.id === id);
-  if (task) {
-    task.title = updatedTitle;
-    saveTasks();
-    renderTasks();
-    editModal.style.display = 'none';
-  }
-});
+        function loadTodos() {
+            // In a real application, this would load from localStorage
+            // For this sandbox environment, we start with an empty array
+            todos = [];
+        }
